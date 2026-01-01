@@ -2,6 +2,12 @@ name = "plexrpc-api"
 main = "worker.js"
 compatibility_date = "2023-10-25"
 
-# Note: Your secrets are managed in the Cloudflare Dashboard 
-# or via 'wrangler secret put'. 
-# They do NOT go in this file.
+# Note: Your secrets (API Keys) are managed in the Cloudflare Dashboard 
+# or via 'wrangler secret put'. They do NOT go in this file.
+
+# --- ⚙️ PUBLIC CONFIGURATION ---
+# These variables are safe to commit to Git.
+# Change SECURITY_MODE to "STRICT" when you are ready to enforce updates.
+[vars]
+SECURITY_MODE = "LOG_ONLY"
+LATEST_CLIENT_VERSION = "2.1.0"
