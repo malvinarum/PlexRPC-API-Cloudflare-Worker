@@ -91,7 +91,7 @@ export default {
            title: `Update to v${LATEST_VERSION}`,
            line1: "⚠️ Update Required",
            line2: `Please install v${LATEST_VERSION}`,
-           image: "https://raw.githubusercontent.com/malvinarum/Plex-Rich-Presence/refs/heads/main/assets/icon.png", 
+           image: "https://malvinarum.com/plexrpc_update.png", 
            url: UPDATE_URL
          });
       }
