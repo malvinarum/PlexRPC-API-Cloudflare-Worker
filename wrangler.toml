@@ -11,3 +11,18 @@ compatibility_date = "2023-10-25"
 [vars]
 SECURITY_MODE = "LOG_ONLY"
 LATEST_CLIENT_VERSION = "2.1.0"
+
+# --- 📊 OBSERVABILITY ---
+# Consolidated into valid TOML structure
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+# --- 🌍 SMART PLACEMENT ---
+# This moves your worker closer to your backend APIs (Spotify/TMDB).
+[placement]
+mode = "smart"
