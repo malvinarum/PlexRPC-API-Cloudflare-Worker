@@ -1,10 +1,5 @@
 # PlexRPC API (Cloudflare Worker)
-
-<a href="https://deploy.workers.cloudflare.com/?url=https://github.com/malvinarum/PlexRPC-API-Cloudflare-Worker">
-  <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
-</a>
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](LICENSE)
-
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](LICENSE) \
 <a href="https://github.com/sponsors/malvinarum">
   <img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=flat-square&logo=github&logoColor=white" alt="Sponsor on GitHub" />
 </a>
@@ -13,8 +8,10 @@
 </a>
 <a href="https://www.buymeacoffee.com/malvinarum">
   <img src="https://img.shields.io/badge/Buy_Me_A_Coffee-Donate-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" />
+</a> \
+<a href="https://deploy.workers.cloudflare.com/?url=https://github.com/malvinarum/PlexRPC-API-Cloudflare-Worker">
+  <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
 </a>
-
 ---
 
 The official serverless backend service for **[PlexRPC](https://github.com/malvinarum/Plex-Rich-Presence)**.
