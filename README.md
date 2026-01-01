@@ -2,15 +2,16 @@
 
 The official serverless backend service for **[PlexRPC](https://github.com/malvinarum/Plex-Rich-Presence)**.
 
-This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows client and various third-party metadata APIs (Spotify, TMDB, Google Books). It secures API keys server-side and provides a unified endpoint for rich metadata with zero latency.
+This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows client and various third-party metadata APIs (Spotify, TMDB, Google Books). It secures API keys server-side, provides a unified endpoint for rich metadata, and enforces client versioning.
 
 ## 🚀 Features
 
 * **🎵 Music Metadata:** Authenticates with **Spotify** (Client Credentials Flow) to fetch high-res album art and track links.
 * **🎬 Movie/TV Metadata:** Queries **TMDB** for movie posters and show details.
 * **📖 Audiobook Metadata:** Searches **Google Books** for cover art and author info.
-* **🔐 Security:** Keeps all sensitive API keys (Spotify Secret, TMDB Key, etc.) in Cloudflare's secure vault, keeping the client "configless" and secure.
-* **⚙️ Dynamic Config:** Serves global configuration (like the Discord App ID) to allow client updates without re-compiling.
+* **🛡️ Active Defense:** Includes in-memory **Rate Limiting** and **Auto-Banning** to protect API quotas from abusive clients.
+* **🔐 Security:** Keeps all sensitive API keys (Spotify Secret, TMDB Key, etc.) in Cloudflare's secure vault.
+* **📲 Version Enforcement:** Can "soft-block" obsolete clients by remotely injecting an "Update Required" notification into their Rich Presence.
 
 ## 🛠️ Prerequisites
 
@@ -47,10 +48,30 @@ This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows c
     # (Repeat for all keys)
     ```
 
-4.  **Deploy to Production:**
+4.  **Configure Environment Variables:**
+    Edit `wrangler.toml` to set your public configuration:
+    ```toml
+    [vars]
+    SECURITY_MODE = "LOG_ONLY"      # Options: "LOG_ONLY" (Passive) or "STRICT" (Enforce rules)
+    LATEST_CLIENT_VERSION = "2.1.0" # The version required to pass strict checks
+    ```
+
+5.  **Deploy to Production:**
     ```bash
     wrangler deploy
     ```
+
+## ⚙️ Configuration & Security Modes
+
+You can control the behavior of the API without redeploying code by changing the `SECURITY_MODE` variable in the Cloudflare Dashboard.
+
+| Mode | Description |
+| :--- | :--- |
+| **`LOG_ONLY`** | **Default.** Logs Client UUIDs and Versions for analytics but allows all traffic. Rate limiting is disabled. Use this for testing/rollouts. |
+| **`STRICT`** | **Active Defense.** Enforces UUID checks, enables Rate Limiting (30 req/min), and blocks old versions. |
+
+### The "Trojan Horse" Update System
+When in `STRICT` mode, if an outdated client (older than `LATEST_CLIENT_VERSION`) requests metadata, the Worker will **not** fetch real data. Instead, it returns a fake metadata payload containing an "Update Required" image and text. This forces the user's Rich Presence to display an update notification.
 
 ## 📡 API Endpoints
 
@@ -60,8 +81,14 @@ This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows c
 * `GET /api/metadata/tv?q={query}` - Returns TMDB TV show poster.
 * `GET /api/metadata/book?q={query}` - Returns Google Books cover.
 
+**Headers Required (Strict Mode):**
+* `x-client-uuid`: A unique UUID v4 string.
+* `x-app-version`: The semantic version of the client (e.g., "2.1.0").
+
 ### Configuration
-* `GET /api/config/discord-id` - Returns the active Discord Client ID.
+* `GET /api/config/discord-id` 
+  * Returns: `{ "client_id": "...", "latest_version": "2.1.0" }`
+  * Used by the client to initialize Discord RPC and check for updates.
 
 ## 📜 License
 
@@ -73,5 +100,3 @@ This project is open-source. Feel free to fork, modify, and distribute.
 
 * The official Plex website can be found at [https://www.plex.tv](https://www.plex.tv).
 * The official Discord website can be found at [https://discord.com](https://discord.com).
-
-The names "Plex", "Discord", as well as related names, marks, emblems, and images are registered trademarks of their respective owners. This application is intended for personal, non-commercial use only.
