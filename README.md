@@ -70,8 +70,8 @@ You can control the behavior of the API without redeploying code by changing the
 | **`LOG_ONLY`** | **Default.** Logs Client UUIDs and Versions for analytics but allows all traffic. Rate limiting is disabled. Use this for testing/rollouts. |
 | **`STRICT`** | **Active Defense.** Enforces UUID checks, enables Rate Limiting (30 req/min), and blocks old versions. |
 
-### The "Trojan Horse" Update System
-When in `STRICT` mode, if an outdated client (older than `LATEST_CLIENT_VERSION`) requests metadata, the Worker will **not** fetch real data. Instead, it returns a fake metadata payload containing an "Update Required" image and text. This forces the user's Rich Presence to display an update notification.
+### Passive Update Notification System
+When in `STRICT` mode, if an outdated client (older than `LATEST_CLIENT_VERSION`) requests metadata, the Worker will **not** fetch real data. Instead, it returns a placeholder metadata payload containing an "Update Required" image and text. This naturally prompts the user to update by displaying the notification directly in their Rich Presence status.
 
 ## 📡 API Endpoints
 
