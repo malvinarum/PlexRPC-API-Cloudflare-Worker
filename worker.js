@@ -1,6 +1,6 @@
 // --- 🚦 RATE LIMIT CONFIGURATION ---
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_REQUESTS = 30;             // Max requests per window
+const MAX_REQUESTS = 5;             // Max requests per window
 const BAN_DURATION = 5 * 60 * 1000;  // 5 minutes ban if limit exceeded
 
 // Global state for rate limiting (Persists per-worker instance)
