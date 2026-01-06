@@ -9,8 +9,8 @@ compatibility_date = "2023-10-25"
 # These variables are safe to commit to Git.
 # Change SECURITY_MODE to "STRICT" when you are ready to enforce updates.
 [vars]
-SECURITY_MODE = "LOG_ONLY"
-LATEST_CLIENT_VERSION = "2.1.0"
+SECURITY_MODE = "STRICT"
+LATEST_CLIENT_VERSION = "2.2.0"
 
 # --- 📊 OBSERVABILITY ---
 # Consolidated into valid TOML structure
