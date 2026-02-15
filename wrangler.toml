@@ -10,7 +10,7 @@ compatibility_date = "2023-10-25"
 # Change SECURITY_MODE to "STRICT" when you are ready to enforce updates.
 [vars]
 SECURITY_MODE = "STRICT"
-LATEST_CLIENT_VERSION = "2.3.0"
+LATEST_CLIENT_VERSION = "2.2.0"
 
 # --- 📊 OBSERVABILITY ---
 # Consolidated into valid TOML structure
