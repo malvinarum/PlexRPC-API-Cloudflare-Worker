@@ -15,7 +15,7 @@ export default {
     // --- ⚙️ CONFIGURATION ---
     // Set these in Cloudflare Dashboard -> Settings -> Variables
     const SECURITY_MODE = env.SECURITY_MODE || "LOG_ONLY"; 
-    const LATEST_VERSION = env.LATEST_CLIENT_VERSION || "2.1.0";
+    const LATEST_VERSION = env.LATEST_CLIENT_VERSION || "2.3.0";
     const UPDATE_URL = "https://github.com/malvinarum/Plex-Rich-Presence/releases";
 
     const corsHeaders = {
@@ -38,14 +38,13 @@ export default {
     if (SECURITY_MODE === "STRICT") {
       
       // 1. HANDLE OLD CLIENTS (Missing UUID)
-      // Instead of blocking with 401, we send the "Update Required" payload.
       if (clientUuid === "UNKNOWN" && !isConfigRoute) {
          return json({
            found: true,
            title: `Update to v${LATEST_VERSION}`,
            line1: "⚠️ Update Required",
            line2: `Please install v${LATEST_VERSION}`,
-           image: "https://malvinarum.com/plexrpc_update.png", 
+           image: "https://raw.githubusercontent.com/malvinarum/Plex-Rich-Presence/refs/heads/main/assets/icon.png", 
            url: UPDATE_URL
          });
       }
@@ -81,7 +80,7 @@ export default {
         clients.set(clientUuid, client);
       }
 
-      // 3. Enforce Version (For clients that HAVE a UUID but are outdated)
+      // 3. Enforce Version
       if (clientVersion !== "UNKNOWN" && 
           clientVersion.localeCompare(LATEST_VERSION, undefined, { numeric: true, sensitivity: 'base' }) < 0 && 
           !isConfigRoute) {
@@ -91,7 +90,7 @@ export default {
            title: `Update to v${LATEST_VERSION}`,
            line1: "⚠️ Update Required",
            line2: `Please install v${LATEST_VERSION}`,
-           image: "https://malvinarum.com/plexrpc_update.png", 
+           image: "https://raw.githubusercontent.com/malvinarum/Plex-Rich-Presence/refs/heads/main/assets/icon.png", 
            url: UPDATE_URL
          });
       }
@@ -101,30 +100,46 @@ export default {
       // --- ROUTE: MUSIC (iTunes) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
+        
+        // Grab the album name if the client provided it
+        const targetAlbum = url.searchParams.get('album') || "";
 
         try {
           const searchParams = new URLSearchParams({ 
             term: query, 
             entity: 'song', 
-            limit: '1' 
+            limit: '15' // Grab a batch of results so we can filter them
           });
           
           const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`);
           const data = await itunesRes.json();
-          const track = data.results?.[0];
-
-          if (track) {
-            return json({
-              found: true,
-              title: track.trackName,
-              artist: track.artistName,
-              album: track.collectionName,
-              // iTunes returns 100x100 art by default. This hack upgrades it to 600x600.
-              image: track.artworkUrl100?.replace('100x100bb', '600x600bb'),
-              url: track.trackViewUrl
-            });
+          
+          if (!data.results || data.results.length === 0) {
+              return json({ found: false });
           }
-          return json({ found: false });
+
+          // Default to the first result (usually the most popular track/single)
+          let bestMatch = data.results[0];
+
+          // If Plex gave us an album name, look through the 15 results for an exact match
+          if (targetAlbum) {
+             const targetLower = targetAlbum.toLowerCase();
+             for (const track of data.results) {
+                 if (track.collectionName && track.collectionName.toLowerCase().includes(targetLower)) {
+                     bestMatch = track;
+                     break; 
+                 }
+             }
+          }
+
+          return json({
+            found: true,
+            title: bestMatch.trackName,
+            artist: bestMatch.artistName,
+            album: bestMatch.collectionName,
+            image: bestMatch.artworkUrl100?.replace('100x100bb', '600x600bb'),
+            url: bestMatch.trackViewUrl
+          });
         } catch (error) {
           return json({ error: "Service unavailable" }, 500);
         }
@@ -189,7 +204,6 @@ export default {
 
       // --- ROUTE: CONFIG ---
       if (path === '/api/config/discord-id') {
-        // Send Client ID AND Latest Version so client can notify user of updates
         return json({ 
             client_id: env.DISCORD_CLIENT_ID || "MISSING_ID",
             latest_version: LATEST_VERSION
