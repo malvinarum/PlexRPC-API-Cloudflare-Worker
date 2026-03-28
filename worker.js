@@ -97,7 +97,7 @@ export default {
     }
 
     try {
-      // --- ROUTE: MUSIC (iTunes) ---
+     // --- ROUTE: MUSIC (iTunes) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
         
@@ -105,10 +105,11 @@ export default {
         const targetAlbum = url.searchParams.get('album') || "";
 
         try {
+          // DO NOT combine the strings here! Let iTunes search broadly for Artist + Track.
           const searchParams = new URLSearchParams({ 
             term: query, 
             entity: 'song', 
-            limit: '50' // Grab a batch of results so we can filter them
+            limit: '50' // Dig deep so we capture the album track in the results
           });
           
           const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`);
@@ -121,7 +122,7 @@ export default {
           // Default to the first result (usually the most popular track/single)
           let bestMatch = data.results[0];
 
-          // If Plex gave us an album name, look through the 15 results for an exact match
+          // Use our Javascript to filter for the album name among the 50 results
           if (targetAlbum) {
              const targetLower = targetAlbum.toLowerCase();
              for (const track of data.results) {
