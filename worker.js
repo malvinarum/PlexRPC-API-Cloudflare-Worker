@@ -98,33 +98,36 @@ export default {
     }
 
     try {
-      // --- ROUTE: MUSIC (Spotify) ---
+      // --- ROUTE: MUSIC (iTunes) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
 
-        const token = await getSpotifyToken(env);
-        if (!token) return json({ error: "Service unavailable" }, 500);
-
-        const searchParams = new URLSearchParams({ q: query, type: 'track', limit: '1' });
-        
-        const spotifyRes = await fetch(`https://api.spotify.com/v1/search?${searchParams}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        const data = await spotifyRes.json();
-        const track = data.tracks?.items?.[0];
-
-        if (track) {
-          return json({
-            found: true,
-            title: track.name,
-            artist: track.artists[0].name,
-            album: track.album.name,
-            image: track.album.images[0]?.url,
-            url: track.external_urls.spotify
+        try {
+          const searchParams = new URLSearchParams({ 
+            term: query, 
+            entity: 'song', 
+            limit: '1' 
           });
+          
+          const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`);
+          const data = await itunesRes.json();
+          const track = data.results?.[0];
+
+          if (track) {
+            return json({
+              found: true,
+              title: track.trackName,
+              artist: track.artistName,
+              album: track.collectionName,
+              // iTunes returns 100x100 art by default. This hack upgrades it to 600x600.
+              image: track.artworkUrl100?.replace('100x100bb', '600x600bb'),
+              url: track.trackViewUrl
+            });
+          }
+          return json({ found: false });
+        } catch (error) {
+          return json({ error: "Service unavailable" }, 500);
         }
-        return json({ found: false });
       }
 
       // --- ROUTE: MOVIES (TMDB) ---
@@ -200,35 +203,3 @@ export default {
     }
   }
 };
-
-// --- SPOTIFY TOKEN LOGIC ---
-let cachedToken = null;
-let tokenExpiresAt = 0;
-
-async function getSpotifyToken(env) {
-  if (cachedToken && Date.now() < tokenExpiresAt - 300000) {
-    return cachedToken;
-  }
-
-  try {
-    const auth = btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
-    const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: 'grant_type=client_credentials'
-    });
-
-    if (!tokenRes.ok) throw new Error('Failed to fetch token');
-
-    const data = await tokenRes.json();
-    cachedToken = data.access_token;
-    tokenExpiresAt = Date.now() + (data.expires_in * 1000);
-    return cachedToken;
-  } catch (error) {
-    console.error("Spotify Auth Failed:", error);
-    return null;
-  }
-}
