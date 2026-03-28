@@ -108,7 +108,7 @@ export default {
           const searchParams = new URLSearchParams({ 
             term: query, 
             entity: 'song', 
-            limit: '15' // Grab a batch of results so we can filter them
+            limit: '50' // Grab a batch of results so we can filter them
           });
           
           const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`);
