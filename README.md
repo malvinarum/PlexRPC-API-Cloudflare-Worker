@@ -17,7 +17,7 @@ This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows c
 
 ## 🚀 Features
 
-* **🎵 Music Metadata:** Authenticates with **Spotify** (Client Credentials Flow) to fetch high-res album art and track links.
+* **🎵 Music Metadata:** Authenticates with **Apple Music** (F*** Spotify) to fetch high-res album art and track links.
 * **🎬 Movie/TV Metadata:** Queries **TMDB** for movie posters and show details.
 * **📖 Audiobook Metadata:** Searches **Google Books** for cover art and author info.
 * **🛡️ Active Defense:** Includes in-memory **Rate Limiting** and **Auto-Banning** to protect API quotas from abusive clients.
@@ -29,7 +29,6 @@ This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows c
 * **Node.js** & **NPM** (Required to install Wrangler)
 * **Cloudflare Account** (Free tier is sufficient)
 * API Keys for:
-    * [Spotify for Developers](https://developer.spotify.com/dashboard)
     * [The Movie Database (TMDB)](https://www.themoviedb.org/documentation/api)
     * [Google Books API](https://developers.google.com/books)
 
@@ -47,15 +46,13 @@ This Cloudflare Worker acts as a secure middleware between the PlexRPC Windows c
 
 3.  **Configure Secrets:**
     You must set the following secrets in your Cloudflare Dashboard (under **Settings -> Variables**) or via the CLI:
-    * `SPOTIFY_CLIENT_ID`
-    * `SPOTIFY_CLIENT_SECRET`
     * `TMDB_API_KEY`
     * `GOOGLE_BOOKS_API_KEY`
     * `DISCORD_CLIENT_ID`
 
     *To set them via CLI:*
     ```bash
-    wrangler secret put SPOTIFY_CLIENT_ID
+    wrangler secret put TMDB_API_KEY
     # (Repeat for all keys)
     ```
 
@@ -87,7 +84,7 @@ When in `STRICT` mode, if an outdated client (older than `LATEST_CLIENT_VERSION`
 ## 📡 API Endpoints
 
 ### Metadata Lookups
-* `GET /api/metadata/music?q={query}` - Returns Spotify track info & art.
+* `GET /api/metadata/music?q={query}` - Returns Apple Music track info & art.
 * `GET /api/metadata/movie?q={query}` - Returns TMDB movie poster.
 * `GET /api/metadata/tv?q={query}` - Returns TMDB TV show poster.
 * `GET /api/metadata/book?q={query}` - Returns Google Books cover.
@@ -98,7 +95,7 @@ When in `STRICT` mode, if an outdated client (older than `LATEST_CLIENT_VERSION`
 
 ### Configuration
 * `GET /api/config/discord-id` 
-  * Returns: `{ "client_id": "...", "latest_version": "2.1.0" }`
+  * Returns: `{ "client_id": "...", "latest_version": "2.3.0" }`
   * Used by the client to initialize Discord RPC and check for updates.
 
 ## 📜 License
