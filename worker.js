@@ -112,7 +112,19 @@ export default {
             limit: '50' // Dig deep so we capture the album track in the results
           });
           
-          const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`);
+          // FIX: Add User-Agent to bypass Apple WAF
+          const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          });
+          
+          // FIX: Catch HTML block pages before parsing JSON
+          if (!itunesRes.ok) {
+            console.error(`iTunes API Blocked Request: ${itunesRes.status}`);
+            return json({ error: "Upstream metadata service unavailable" }, 502); 
+          }
+
           const data = await itunesRes.json();
           
           if (!data.results || data.results.length === 0) {
