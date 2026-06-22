@@ -3,8 +3,9 @@ const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const MAX_REQUESTS = 5;             // Max requests per window
 const BAN_DURATION = 5 * 60 * 1000;  // 5 minutes ban if limit exceeded
 
-// Global state for rate limiting (Persists per-worker instance)
+// Global state for rate limiting & caching (Persists per-worker instance)
 const clients = new Map();
+const apiCache = new Map(); // Edge Memory Cache
 
 export default {
   async fetch(request, env, ctx) {
@@ -13,7 +14,6 @@ export default {
     const query = url.searchParams.get('q');
 
     // --- ⚙️ CONFIGURATION ---
-    // Set these in Cloudflare Dashboard -> Settings -> Variables
     const SECURITY_MODE = env.SECURITY_MODE || "LOG_ONLY"; 
     const LATEST_VERSION = env.LATEST_CLIENT_VERSION || "2.3.0";
     const UPDATE_URL = "https://github.com/malvinarum/Plex-Rich-Presence/releases";
@@ -31,13 +31,8 @@ export default {
     const clientUuid = request.headers.get('x-client-uuid') || "UNKNOWN";
     const isConfigRoute = path.startsWith('/api/config/');
 
-    // Analytics Log
-    console.log(`[${SECURITY_MODE}] Path: ${path} | Ver: ${clientVersion} | UUID: ${clientUuid}`);
-
     // --- 🔒 SECURITY & RATE LIMITING (STRICT MODE ONLY) ---
     if (SECURITY_MODE === "STRICT") {
-      
-      // 1. HANDLE OLD CLIENTS (Missing UUID)
       if (clientUuid === "UNKNOWN" && !isConfigRoute) {
          return json({
            found: true,
@@ -49,19 +44,16 @@ export default {
          });
       }
 
-      // 2. Rate Limiting (Only runs if we have a valid UUID)
       if (!isConfigRoute && clientUuid !== "UNKNOWN") {
         const now = Date.now();
         let client = clients.get(clientUuid) || { count: 0, windowStart: now, bannedUntil: 0 };
 
-        // A. Check Ban Status
         if (client.bannedUntil > now) {
           const remainingSeconds = Math.ceil((client.bannedUntil - now) / 1000);
           console.warn(`[BLOCKED] UUID: ${clientUuid} is banned for ${remainingSeconds}s`);
           return json({ error: `Too many requests. You are banned for ${remainingSeconds} seconds.` }, 429);
         }
 
-        // B. Reset Window
         if (now - client.windowStart > RATE_LIMIT_WINDOW) {
           client.count = 1;
           client.windowStart = now;
@@ -70,7 +62,6 @@ export default {
           client.count++;
         }
 
-        // C. Trigger Ban
         if (client.count > MAX_REQUESTS) {
           client.bannedUntil = now + BAN_DURATION;
           console.warn(`[BANNING] UUID: ${clientUuid} exceeded limit (${MAX_REQUESTS}/min)`);
@@ -80,11 +71,9 @@ export default {
         clients.set(clientUuid, client);
       }
 
-      // 3. Enforce Version
       if (clientVersion !== "UNKNOWN" && 
           clientVersion.localeCompare(LATEST_VERSION, undefined, { numeric: true, sensitivity: 'base' }) < 0 && 
           !isConfigRoute) {
-         
          return json({
            found: true,
            title: `Update to v${LATEST_VERSION}`,
@@ -97,44 +86,54 @@ export default {
     }
 
     try {
-     // --- ROUTE: MUSIC (iTunes) ---
+      // --- 🧠 EDGE SHIELD CACHE (Intercept Before Upstream) ---
+      const cacheKey = url.pathname + url.search;
+      if (path.startsWith('/api/metadata/') && apiCache.has(cacheKey)) {
+          const cached = apiCache.get(cacheKey);
+          if (Date.now() < cached.expires) {
+              return json(cached.data);
+          }
+          apiCache.delete(cacheKey); // Expired, clear it out
+      }
+
+      // --- ROUTE: MUSIC (iTunes) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
         
-        // Grab the album name if the client provided it
         const targetAlbum = url.searchParams.get('album') || "";
 
         try {
-          // DO NOT combine the strings here! Let iTunes search broadly for Artist + Track.
           const searchParams = new URLSearchParams({ 
             term: query, 
             entity: 'song', 
-            limit: '50' // Dig deep so we capture the album track in the results
+            limit: '50' 
           });
           
-          // FIX: Add User-Agent to bypass Apple WAF
           const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
           });
           
-          // FIX: Catch HTML block pages before parsing JSON
           if (!itunesRes.ok) {
             console.error(`iTunes API Blocked Request: ${itunesRes.status}`);
+            if (itunesRes.status === 429) {
+                // Apple is furious. Cache a graceful fallback for 5 minutes to soak up the client spam.
+                const fallback = { found: false };
+                apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+                return json(fallback);
+            }
             return json({ error: "Upstream metadata service unavailable" }, 502); 
           }
 
           const data = await itunesRes.json();
           
           if (!data.results || data.results.length === 0) {
-              return json({ found: false });
+              const notFound = { found: false };
+              apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) }); // Cache missing tracks for 1 hr
+              return json(notFound);
           }
 
-          // Default to the first result (usually the most popular track/single)
           let bestMatch = data.results[0];
 
-          // Use our Javascript to filter for the album name among the 50 results
           if (targetAlbum) {
              const targetLower = targetAlbum.toLowerCase();
              for (const track of data.results) {
@@ -145,14 +144,18 @@ export default {
              }
           }
 
-          return json({
+          const payload = {
             found: true,
             title: bestMatch.trackName,
             artist: bestMatch.artistName,
             album: bestMatch.collectionName,
             image: bestMatch.artworkUrl100?.replace('100x100bb', '600x600bb'),
             url: bestMatch.trackViewUrl
-          });
+          };
+
+          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) }); // Cache success for 24 hrs
+          return json(payload);
+
         } catch (error) {
           return json({ error: "Service unavailable" }, 500);
         }
@@ -167,14 +170,19 @@ export default {
         const result = data.results?.[0];
 
         if (result && result.poster_path) {
-          return json({
+          const payload = {
             found: true,
             title: result.title,
             image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
             url: `https://www.themoviedb.org/movie/${result.id}`
-          });
+          };
+          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+          return json(payload);
         }
-        return json({ found: false });
+        
+        const notFound = { found: false };
+        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+        return json(notFound);
       }
 
       // --- ROUTE: TV SHOWS (TMDB) ---
@@ -186,14 +194,19 @@ export default {
         const result = data.results?.[0];
 
         if (result && result.poster_path) {
-          return json({
+          const payload = {
             found: true,
             title: result.name,
             image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
             url: `https://www.themoviedb.org/tv/${result.id}`
-          });
+          };
+          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+          return json(payload);
         }
-        return json({ found: false });
+
+        const notFound = { found: false };
+        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+        return json(notFound);
       }
 
       // --- ROUTE: BOOKS (Google Books) ---
@@ -205,14 +218,19 @@ export default {
         const result = data.items?.[0]?.volumeInfo;
 
         if (result && result.imageLinks?.thumbnail) {
-          return json({
+          const payload = {
             found: true,
             title: result.title,
             image: result.imageLinks.thumbnail.replace('http://', 'https://'),
             url: result.infoLink
-          });
+          };
+          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+          return json(payload);
         }
-        return json({ found: false });
+
+        const notFound = { found: false };
+        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+        return json(notFound);
       }
 
       // --- ROUTE: CONFIG ---
