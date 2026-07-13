@@ -96,95 +96,67 @@ export default {
           apiCache.delete(cacheKey); // Expired, clear it out
       }
 
-      // --- ROUTE: MUSIC (iTunes) ---
+  // --- ROUTE: MUSIC (Deezer) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
-        
+
         const targetAlbum = url.searchParams.get('album') || "";
 
         try {
-          const searchParams = new URLSearchParams({ 
-            term: query, 
-            entity: 'song', 
-            limit: '50' 
+          const searchParams = new URLSearchParams({ q: query, limit: '25' });
+          const dzRes = await fetch(`https://api.deezer.com/search?${searchParams}`, {
+            headers: { "User-Agent": "PlexRPC/2.3 (metadata)" }
           });
-          
-          const itunesRes = await fetch(`https://itunes.apple.com/search?${searchParams}`, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
-          });
-          
-          if (!itunesRes.ok) {
-            console.error(`iTunes API Blocked Request: ${itunesRes.status}`);
-            if (itunesRes.status === 429) {
-                // Apple is furious. Cache a graceful fallback for 5 minutes to soak up the client spam.
-                const fallback = { found: false };
-                apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
-                return json(fallback);
-            }
-            return json({ error: "Upstream metadata service unavailable" }, 502); 
+
+          if (!dzRes.ok) {
+            const fallback = { found: false };
+            apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+            return json(fallback);
           }
 
-          const data = await itunesRes.json();
-          
-          if (!data.results || data.results.length === 0) {
-              const notFound = { found: false };
-              apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) }); // Cache missing tracks for 1 hr
-              return json(notFound);
+          const data = await dzRes.json();
+
+          // Deezer signals quota errors as a 200 with an {error:{code:4,...}} body
+          if (data.error) {
+            const fallback = { found: false };
+            apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+            return json(fallback);
           }
 
-          let bestMatch = data.results[0];
+          if (!data.data || data.data.length === 0) {
+            const notFound = { found: false };
+            apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+            return json(notFound);
+          }
 
+          let bestMatch = data.data[0];
           if (targetAlbum) {
-             const targetLower = targetAlbum.toLowerCase();
-             for (const track of data.results) {
-                 if (track.collectionName && track.collectionName.toLowerCase().includes(targetLower)) {
-                     bestMatch = track;
-                     break; 
-                 }
-             }
+            const targetLower = targetAlbum.toLowerCase();
+            for (const track of data.data) {
+              if (track.album?.title && track.album.title.toLowerCase().includes(targetLower)) {
+                bestMatch = track;
+                break;
+              }
+            }
           }
 
           const payload = {
             found: true,
-            title: bestMatch.trackName,
-            artist: bestMatch.artistName,
-            album: bestMatch.collectionName,
-            image: bestMatch.artworkUrl100?.replace('100x100bb', '600x600bb'),
-            url: bestMatch.trackViewUrl
+            title: bestMatch.title,
+            artist: bestMatch.artist?.name,
+            album: bestMatch.album?.title,
+            image: bestMatch.album?.cover_xl || bestMatch.album?.cover_big,
+            url: bestMatch.link
           };
 
-          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) }); // Cache success for 24 hrs
+          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
           return json(payload);
 
         } catch (error) {
           return json({ error: "Service unavailable" }, 500);
         }
       }
-
-      // --- ROUTE: MOVIES (TMDB) ---
-      if (path === '/api/metadata/movie') {
-        if (!query) return json({ found: false });
-        
-        const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`);
-        const data = await tmdbRes.json();
-        const result = data.results?.[0];
-
-        if (result && result.poster_path) {
-          const payload = {
-            found: true,
-            title: result.title,
-            image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
-            url: `https://www.themoviedb.org/movie/${result.id}`
-          };
-          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
-          return json(payload);
-        }
-        
-        const notFound = { found: false };
-        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
-        return json(notFound);
-      }
-
+      
       // --- ROUTE: TV SHOWS (TMDB) ---
       if (path === '/api/metadata/tv') {
         if (!query) return json({ found: false });
