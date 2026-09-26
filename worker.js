@@ -161,8 +161,17 @@ export default {
       if (path === '/api/metadata/movie') {
         if (!query) return json({ found: false });
 
+        // Optional release year to disambiguate same-titled films
+        const yearParam = url.searchParams.get('year');
+        const year = /^\d{4}$/.test(yearParam || '') ? yearParam : null;
+
+        const searchMovies = async (withYear) => {
+          const yearPart = withYear ? `&year=${withYear}` : '';
+          return fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false${yearPart}`);
+        };
+
         try {
-          const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`);
+          let tmdbRes = await searchMovies(year);
 
           if (!tmdbRes.ok) {
             console.warn(`[TMDB] movie search failed: ${tmdbRes.status} for query "${query}"`);
@@ -171,7 +180,14 @@ export default {
             return json(fallback);
           }
 
-          const data = await tmdbRes.json();
+          let data = await tmdbRes.json();
+
+          // Plex and TMDB years can disagree (festival vs. theatrical release), so fall back to a plain search
+          if (year && (!data.results || data.results.length === 0)) {
+            tmdbRes = await searchMovies(null);
+            if (tmdbRes.ok) data = await tmdbRes.json();
+          }
+
           const result = data.results?.[0];
 
           if (result && result.poster_path) {
