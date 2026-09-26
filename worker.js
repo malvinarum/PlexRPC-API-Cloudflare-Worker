@@ -96,7 +96,7 @@ export default {
           apiCache.delete(cacheKey); // Expired, clear it out
       }
 
-  // --- ROUTE: MUSIC (Deezer) ---
+      // --- ROUTE: MUSIC (Deezer) ---
       if (path === '/api/metadata/music') {
         if (!query) return json({ error: "No query provided" }, 400);
 
@@ -156,53 +156,116 @@ export default {
           return json({ error: "Service unavailable" }, 500);
         }
       }
-      
+
+      // --- ROUTE: MOVIES (TMDB) ---
+      if (path === '/api/metadata/movie') {
+        if (!query) return json({ found: false });
+
+        try {
+          const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`);
+
+          if (!tmdbRes.ok) {
+            console.warn(`[TMDB] movie search failed: ${tmdbRes.status} for query "${query}"`);
+            const fallback = { found: false };
+            apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+            return json(fallback);
+          }
+
+          const data = await tmdbRes.json();
+          const result = data.results?.[0];
+
+          if (result && result.poster_path) {
+            const payload = {
+              found: true,
+              title: result.title,
+              image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
+              url: `https://www.themoviedb.org/movie/${result.id}`
+            };
+            apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+            return json(payload);
+          }
+
+          const notFound = { found: false };
+          apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+          return json(notFound);
+
+        } catch (error) {
+          return json({ error: "Service unavailable" }, 500);
+        }
+      }
+
       // --- ROUTE: TV SHOWS (TMDB) ---
       if (path === '/api/metadata/tv') {
         if (!query) return json({ found: false });
 
-        const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`);
-        const data = await tmdbRes.json();
-        const result = data.results?.[0];
+        try {
+          const tmdbRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${env.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`);
 
-        if (result && result.poster_path) {
-          const payload = {
-            found: true,
-            title: result.name,
-            image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
-            url: `https://www.themoviedb.org/tv/${result.id}`
-          };
-          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
-          return json(payload);
+          if (!tmdbRes.ok) {
+            console.warn(`[TMDB] tv search failed: ${tmdbRes.status} for query "${query}"`);
+            const fallback = { found: false };
+            apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+            return json(fallback);
+          }
+
+          const data = await tmdbRes.json();
+          const result = data.results?.[0];
+
+          if (result && result.poster_path) {
+            const payload = {
+              found: true,
+              title: result.name,
+              image: `https://image.tmdb.org/t/p/w500${result.poster_path}`,
+              url: `https://www.themoviedb.org/tv/${result.id}`
+            };
+            apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+            return json(payload);
+          }
+
+          const notFound = { found: false };
+          apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+          return json(notFound);
+
+        } catch (error) {
+          return json({ error: "Service unavailable" }, 500);
         }
-
-        const notFound = { found: false };
-        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
-        return json(notFound);
       }
 
       // --- ROUTE: BOOKS (Google Books) ---
       if (path === '/api/metadata/book') {
         if (!query) return json({ found: false });
 
-        const booksRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&key=${env.GOOGLE_BOOKS_API_KEY}&maxResults=1`);
-        const data = await booksRes.json();
-        const result = data.items?.[0]?.volumeInfo;
+        try {
+          const booksRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&key=${env.GOOGLE_BOOKS_API_KEY}&maxResults=1`);
 
-        if (result && result.imageLinks?.thumbnail) {
-          const payload = {
-            found: true,
-            title: result.title,
-            image: result.imageLinks.thumbnail.replace('http://', 'https://'),
-            url: result.infoLink
-          };
-          apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
-          return json(payload);
+          if (!booksRes.ok) {
+            console.warn(`[GoogleBooks] search failed: ${booksRes.status} for query "${query}"`);
+            const fallback = { found: false };
+            apiCache.set(cacheKey, { data: fallback, expires: Date.now() + (5 * 60 * 1000) });
+            return json(fallback);
+          }
+
+          const data = await booksRes.json();
+          const result = data.items?.[0]?.volumeInfo;
+
+          if (result && result.imageLinks?.thumbnail) {
+            const payload = {
+              found: true,
+              title: result.title,
+              image: result.imageLinks.thumbnail.replace('http://', 'https://'),
+              url: result.infoLink
+            };
+            apiCache.set(cacheKey, { data: payload, expires: Date.now() + (24 * 60 * 60 * 1000) });
+            return json(payload);
+          }
+
+          const notFound = { found: false };
+          apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
+          return json(notFound);
+
+        } catch (error) {
+          return json({ error: "Service unavailable" }, 500);
         }
-
-        const notFound = { found: false };
-        apiCache.set(cacheKey, { data: notFound, expires: Date.now() + (60 * 60 * 1000) });
-        return json(notFound);
       }
 
       // --- ROUTE: CONFIG ---
